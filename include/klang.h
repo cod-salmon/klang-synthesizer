@@ -4221,6 +4221,7 @@ namespace klang {
 	class NoteBase : public Controller {
 		SYNTH* synth;
 
+	public:
 		class Controls {
 			klang::Controls* controls = nullptr;
 		public:

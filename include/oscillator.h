@@ -1,29 +1,78 @@
 #include <klang.h>
-#include <vector>
-#include <map>
-#include <fstream>
-#include <sstream>
-#include <array>
-#include <algorithm>
-#include <filesystem>
-
-using namespace klang::optimised;
+#include <fstream>          // for file operations
+#include <sstream>          // for file operations
+#include <filesystem>       // for finding current path
 
 namespace asynth {
     static const int OSCSize {3};
     static const int OSCFunctionSize {1000};
+    static const int OSCSampleSize {100};
 }
 
-float hardclip(float in){
-	if(in > 1.f)
-		return 1.f;
-	else if(in < -.8f)
-		return -.8f;
-	else
-		return in;
-}
+//! Uses additive synthesis to build an Oscillator 
+//  type out of a set of freq. vs. dB points.
+struct OSCSample : public Oscillator {
+    std::pair<float, dB> harmonics [asynth::OSCSampleSize];     // array of <float, dB> pairs holding freq. and loudness for each oscillator
+    Sine osc [asynth::OSCSampleSize];                           // array of Sine oscillators, each one setup according to "harmonics"
+    int harmonicSize {};                                        // actual number of oscillators to add-up
+    float f0 {};                                                // fundamental frequency, assumed to be first frequency on file
+    public:
+        //! Constructor. Takes an integer that helps identify the file where the (freq., dB) points that define
+        //      the sample are stored. Points are read from file and stored in the "harmonics" array.
+        OSCSample (int o) {
+            // Open the text file for the specific Sample
+            std::filesystem::path cwd = std::filesystem::current_path();
+            std::string filename = cwd.string() + "/../include/oscillators/Sample_" + std::to_string(o + 1) + ".txt";
+            std::ifstream file(filename);
 
-struct OSCEnvelope : public Oscillator {
+            // Check if the file is successfully opened
+            if (!file.is_open()) {
+                debug.print("Error opening the file ", filename.c_str(), "\n");
+            }
+            
+            // Read the file, line by line
+            std::string line; int p = 0;                  
+            while (std::getline(file, line, '\n')) {
+                // Each line holds two floats separated by a whitespace
+                //  representing the freq. and the loudness in dB
+                std::stringstream ss(line); int count = 0;
+                while(getline(ss, line, ' ')){          
+                    if (f0 == 0) { // still not setup fundamental frequency
+                        f0 = std::stof(line);
+                    } else {
+                        if (count == 0) {   // we are looking at frequency
+                            harmonics[p].first = std::stof(line)/f0;
+                        } else {            // we are looking at dB
+                            harmonics[p].second = std::stof(line);
+                        }
+                    }
+                    count ++;
+                }
+                count = 0; // reset count
+                p++;
+            }
+
+            harmonicSize = p;
+            // Close the file
+            file.close();        
+        }
+
+        void set(param frequency) {
+            for ( int o = 0; o < harmonicSize; o++ ) {
+                osc[o].set(frequency * harmonics[o].first);
+            }
+        }
+    
+        void process() {
+            signal mix = 0;
+            for ( int o = 0; o < harmonicSize; o++ ) {
+                mix += osc[o] * harmonics[o].second->Amplitude;
+            }
+            mix >> out;
+        }
+};
+
+struct OSCFunction : public Oscillator {
     // Allocate a lot of memory to hopefully be able to accomodate all points in file
     std::vector<Envelope::Point> points = std::vector<Envelope::Point>(asynth::OSCFunctionSize, Envelope::Point());
     int envSize {}; // actual number of data points in the input file
@@ -32,7 +81,7 @@ struct OSCEnvelope : public Oscillator {
     public:
         //! Constructor. Takes an integer that helps identify the file where the data points that define
         //      the envelope are stored. Points are read from file and stored in a vector.
-        OSCEnvelope (int o) {
+        OSCFunction (int o) {
             // Open the text file for the specific Function
             std::filesystem::path cwd = std::filesystem::current_path();
             std::string filename = cwd.string() + "/../include/oscillators/Function_" + std::to_string(o + 1) + ".txt";
@@ -46,11 +95,11 @@ struct OSCEnvelope : public Oscillator {
             // Read the file, line by line
             std::string line; int p = 0;                  
             while (std::getline(file, line, '\n')) {
-                // Each line holds two floats separated by a comma
+                // Each line holds two floats separated by a whitespace
                 //  representing the x and y coordinates
                 std::stringstream ss(line);
                 float point[2]; int count = 0;
-                while(getline(ss, line, ',')){          
+                while(getline(ss, line, ' ')){          
                     point[count++] = std::stof(line);
                 }
                 points[p] = Envelope::Point(point[0], point[1]);
@@ -113,9 +162,16 @@ struct OSC: public Oscillator {
                     break;
                 }
 				case 4: {
-                    oscs[o] = std::make_unique<Wavetable>(OSCEnvelope(o));
+                    oscs[o] = std::make_unique<Wavetable>(OSCFunction(o));
                     break;
                 }
+                case 5: {
+                    oscs[o] = std::make_unique<Wavetable>(OSCSample(o));
+                    break;
+                }
+                default:
+                    oscs[o] = std::make_unique<Sine>();
+                    break;
 			}
             // Obtain the gain for each oscillator in OSC
             gains[o] = controls[o];

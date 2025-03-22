@@ -10,25 +10,36 @@ struct FMFlex1 : Synth {
 		// Define array of operator with base signal OSC
 		Operator<OSC> ops [FMFlex1OperatorSize];
 		// Define array of ADSR for each of the operators
-		ADSR op_adsrs [FMFlex1OperatorSize];
+		ADSR adsrs [FMFlex1OperatorSize];
 		// ADSR for the final operator result
 		ADSR adsr;
 		// Filter to apply to the final operator result
 		// filter flt;
 		param f0;
+		
+		LPF lpf;
+		HPF hpf;
+		BPF bpf;
 
 		event on(Pitch pitch, Amplitude velocity) {
 			f0 = pitch -> Frequency;
 			const param detune = controls[6] * 0.01f;
 			std::array<int, OSCSize>    types {(int)controls[0], (int)controls[1], (int)controls[2]};
 			std::array<float, OSCSize>  gains {controls[3], controls[4], controls[5]};
+			
 
 			for (int op = 0; op < FMFlex1OperatorSize; op ++) {
 				// Sets up the oscillator of each operator to OSC
 				ops[op].set(f0 * controls[8 + 6*op], detune, types, gains);
-				ops[op] = { { 0,1 }, { 1, 0.5 }, { 5, 0.125 } };
+				adsrs[op].set(controls[10 + 6*op],
+							  controls[11 + 6*op],
+							  controls[12 + 6*op],
+							  controls[13 + 6*op]);
+		
+				ops[op] = adsrs[op];
 			}
-			adsr(0.0, 0.05, 0.25, 0.5);
+			
+			adsr(controls[26], controls[27], controls[28], controls[29]);
 			
 		}
 
@@ -37,7 +48,25 @@ struct FMFlex1 : Synth {
 		}
 
 		void process() {
-			( (ops[0] * controls[9]) >> (ops[1] * controls[15]) >> (ops[2] * controls[21]) ) * adsr >> out;
+			param f = controls[31];
+			param Q = controls[32];
+			
+			signal mix;
+			
+			switch((int)controls[7]) {
+				case 0: ((ops[0] * controls[9]) >> (ops[1] * controls[15]) >> (ops[2] * controls[21])) * adsr >> mix; break;
+				case 1: ((ops[0] * controls[9]) + (ops[1] * controls[15]) + (ops[2] * controls[21])) * adsr >> mix; break;
+				case 2: ((ops[0] * controls[9]) + (ops[1] * controls[15]) + (ops[2] * controls[21])) * adsr >> mix; break;
+			}
+			
+			switch((int)controls[30]){
+				case 0: mix >> lpf(f, Q) >> out; break;
+				case 1: mix >> hpf(f, Q) >> out; break;
+				case 2: mix >> bpf(f, Q) >> out; break;
+				case 3: mix >> out;
+			}
+			
+		
 			if (adsr.finished())
 				stop();
 		}
@@ -85,7 +114,7 @@ struct FMFlex1 : Synth {
 					 Slider("R", 0, 1, 0.5, { 194, 227, 10, 21 } ),
 			},
 			
-			{ "Filter", Menu("", { 278, 222, 71, 20 }, "Low-pass", "High-pass", "Band-pass" ),
+			{ "Filter", Menu("", { 278, 222, 71, 20 }, "Low-pass", "High-pass", "Band-pass", "None" ),
 						Dial("f", 100, 10000, 10000, { 225, 227, 20, 20 } ),
 						Dial("Q", 0.1, 10, 1, { 248, 227, 20, 20 } ),
 						},

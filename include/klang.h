@@ -4162,7 +4162,7 @@ namespace klang {
 		}
 
 		virtual void process() override {
-			OSCILLATOR::set(+in);
+			//OSCILLATOR::set(+in);
 			OSCILLATOR::process();
 			OSCILLATOR::out *= env++ * amp;
 		}

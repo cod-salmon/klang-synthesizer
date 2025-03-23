@@ -4171,6 +4171,14 @@ namespace klang {
 			carrier << *this;
 			return carrier;
 		}
+
+		// Allows to use Operator as oscillator + ADSR
+		//	with the ADSR (Envelope) release method available
+		//	for event off
+		void release(const param& R) {
+			env.release(float(R));
+		}
+
 	};
 
 	template<class OSCILLATOR>

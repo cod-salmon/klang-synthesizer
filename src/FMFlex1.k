@@ -22,30 +22,51 @@ struct FMFlex1 : Synth {
 		BPF bpf;
 
 		event on(Pitch pitch, Amplitude velocity) {
+		
 			f0 = pitch -> Frequency;
+			
+			// Params to setup OSC oscillator
 			const param detune = controls[6] * 0.01f;
 			std::array<int, OSCSize>    types {(int)controls[0], (int)controls[1], (int)controls[2]};
 			std::array<float, OSCSize>  gains {controls[3], controls[4], controls[5]};
 			
-
-			for (int op = 0; op < FMFlex1OperatorSize; op ++) {
-				// Sets up the oscillator of each operator to OSC
-				ops[op].set(f0 * controls[8 + 6*op], detune, types, gains);
-				adsrs[op].set(controls[10 + 6*op],
-							  controls[11 + 6*op],
-							  controls[12 + 6*op],
-							  controls[13 + 6*op]);
+			// If selected algorithm is None, then simply output 
+			//	OSC with AMP on it; else, setup each operator
+			if ((int)controls[7] == 3) {
+				ops[0].set(f0, detune, types, gains);
+				adsrs[0].set(controls[26], 
+							 controls[27], 
+							 controls[28], 
+							 controls[29]);
+				ops[0] = adsrs[0];
+			} else {
+				for (int op = 0; op < FMFlex1OperatorSize; op ++) {
+					ops[op].set(f0 * controls[8 + 6*op], detune, types, gains);
+					adsrs[op].set(controls[10 + 6*op],
+								  controls[11 + 6*op],
+								  controls[12 + 6*op],
+								  controls[13 + 6*op]);
 		
-				ops[op] = adsrs[op];
+					ops[op] = adsrs[op];
+				}
 			}
 			
+			
+			// Envelope before output. Not applied if algorithm is None
 			adsr(controls[26], controls[27], controls[28], controls[29]);
 			
 		}
 
 		event off(Amplitude velocity) {
-			adsr.release();
+			if ((int)controls[7] == 3) { 
+				// Added extra feature on Operator struct
+				//	to allow calling Operator::env.release()
+				ops[0].release(controls[29]);
+			} else { 
+				adsr.release();
+			}
 		}
+		
 
 		void process() {
 			param f = controls[31];
@@ -57,6 +78,7 @@ struct FMFlex1 : Synth {
 				case 0: ((ops[0] * controls[9]) >> (ops[1] * controls[15]) >> (ops[2] * controls[21])) * adsr >> mix; break;
 				case 1: ((ops[0] * controls[9]) + (ops[1] * controls[15]) + (ops[2] * controls[21])) * adsr >> mix; break;
 				case 2: ((ops[0] * controls[9]) + (ops[1] * controls[15]) + (ops[2] * controls[21])) * adsr >> mix; break;
+				case 3: ops[0] >> mix; break;
 			}
 			
 			switch((int)controls[30]){
@@ -85,7 +107,7 @@ struct FMFlex1 : Synth {
 						Dial("Detune", 0, 1, 0, { 55, 75, 40, 40 } )
 			},		
 			
-			Menu("", { 27, 18, 90, 17 }, "ALG1", "ALG2", "ALG3"),	
+			Menu("", { 27, 18, 90, 17 }, "ALG1", "ALG2", "ALG3", "None"),	
 		
 			{ "Op1", Dial("f", 0, 2, 0.5, { 132, 55, 30, 30 }), 
 					 Dial("Amt", 0, 10, 1, { 165, 55, 30, 30 }),

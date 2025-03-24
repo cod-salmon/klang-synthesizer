@@ -3,24 +3,26 @@
 using namespace klang::optimised;
 
 static const int FMFlex1OperatorSize {3};
+static const int FMFlex1FilterSize {3};
 
 struct FMFlex1 : Synth {
 
 	struct FMFlex1Note : public Note {
-		// Define array of operator with base signal OSC
-		Operator<OSC> ops [FMFlex1OperatorSize];
+		// Define array of operators with base signal OSC
+		Operator<OSC> ops [FMFlex1OperatorSize]; 
 		// Define array of ADSR for each of the operators
-		ADSR adsrs [FMFlex1OperatorSize];
+		ADSR ops_adsrs [FMFlex1OperatorSize];
 		// ADSR for the final operator result
 		ADSR adsr;
 		// Filter to apply to the final operator result
-		// filter flt;
+		std::unique_ptr<Filter> filter [FMFlex1FilterSize] = {
+			std::make_unique<LPF>(),
+			std::make_unique<HPF>(),
+			std::make_unique<BPF>()
+		};
+		// Frequency played on key
 		param f0;
 		
-		LPF lpf;
-		HPF hpf;
-		BPF bpf;
-
 		event on(Pitch pitch, Amplitude velocity) {
 		
 			f0 = pitch -> Frequency;
@@ -32,35 +34,40 @@ struct FMFlex1 : Synth {
 			
 			// If selected algorithm is None, then simply output 
 			//	OSC with AMP on it; else, setup each operator
+			//	according to its ADSR parameters
 			if ((int)controls[7] == 3) {
 				ops[0].set(f0, detune, types, gains);
-				adsrs[0].set(controls[26], 
-							 controls[27], 
-							 controls[28], 
-							 controls[29]);
-				ops[0] = adsrs[0];
+				ops_adsrs[0].set(controls[26], 
+							     controls[27], 
+							     controls[28], 
+							     controls[29]);
+				ops[0] = ops_adsrs[0];
 			} else {
 				for (int op = 0; op < FMFlex1OperatorSize; op ++) {
 					ops[op].set(f0 * controls[8 + 6*op], detune, types, gains);
-					adsrs[op].set(controls[10 + 6*op],
-								  controls[11 + 6*op],
-								  controls[12 + 6*op],
-								  controls[13 + 6*op]);
+					ops_adsrs[op].set(controls[10 + 6*op],
+								   	  controls[11 + 6*op],
+								      controls[12 + 6*op],
+								      controls[13 + 6*op]);
 		
-					ops[op] = adsrs[op];
+					ops[op] = ops_adsrs[op];
 				}
 			}
 			
 			
-			// Envelope before output. Not applied if algorithm is None
+			// Envelope right before output. Not applied if algorithm is None
 			adsr(controls[26], controls[27], controls[28], controls[29]);
 			
 		}
 
 		event off(Amplitude velocity) {
+			// Call Envelope::release
 			if ((int)controls[7] == 3) { 
-				// Added extra feature on Operator struct
-				//	to allow calling Operator::env.release()
+				// If algorithm is none, we applied AMP on Op1
+				//	 and we wish to call Envelope::release with 
+				//	 AMP's R parameter. To do so, I added an extra 
+				//	 method to the Operator struct to allow calling 
+				//	 its internal env.release()
 				ops[0].release(controls[29]);
 			} else { 
 				adsr.release();
@@ -72,19 +79,24 @@ struct FMFlex1 : Synth {
 			param f = controls[31];
 			param Q = controls[32];
 			
+			// Set each filter to the input frequency and Q values
+			for (int flt = 0; flt < FMFlex1FilterSize; flt ++) { filter[flt]->set(f, Q);}
+			
 			signal mix;
 			
+			// Performs different operations on OSC output based on selected algorithm
 			switch((int)controls[7]) {
 				case 0: ((ops[0] * controls[9]) >> (ops[1] * controls[15]) >> (ops[2] * controls[21])) * adsr >> mix; break;
 				case 1: ((ops[0] * controls[9]) + (ops[1] * controls[15]) + (ops[2] * controls[21])) * adsr >> mix; break;
-				case 2: ((ops[0] * controls[9]) + (ops[1] * controls[15]) + (ops[2] * controls[21])) * adsr >> mix; break;
+				case 2: (((ops[1] * controls[15]) >> (ops[2] * controls[21]) ) + (ops[0] * controls[9])) * adsr >> mix; break;
 				case 3: ops[0] >> mix; break;
 			}
 			
+			// Applies different filter based on input
 			switch((int)controls[30]){
-				case 0: mix >> lpf(f, Q) >> out; break;
-				case 1: mix >> hpf(f, Q) >> out; break;
-				case 2: mix >> bpf(f, Q) >> out; break;
+				case 0: mix >> (*filter[0]) >> out; break;
+				case 1: mix >> (*filter[1]) >> out; break;
+				case 2: mix >> (*filter[2]) >> out; break;
 				case 3: mix >> out;
 			}
 			

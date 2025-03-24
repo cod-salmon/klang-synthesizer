@@ -9,7 +9,7 @@ using namespace klang::optimised;
 static const int OSCSize {3};
 static const int OSCOptionSize {10};
 static const int OSCFunctionSize {1000};
-static const int OSCSampleSize {100};
+static const int OSCSampleSize {1000};
 
 //! Uses additive synthesis to build an Oscillator 
 //  type out of a set of freq. vs. dB points.

@@ -4174,7 +4174,7 @@ namespace klang {
 
 		// Allows to use Operator as oscillator + ADSR
 		//	with the ADSR (Envelope) release method available
-		//	for event off
+		//	for use in event off
 		void release(const param& R) {
 			env.release(float(R));
 		}

@@ -27,7 +27,7 @@ struct Operators : Synth {
 		}
 
 		void process() {
-			((op1 * controls[1]) >> (op2 * controls[3]) >> op3) * adsr >> dcfilter >> out;
+			(  (op1 << op1) >> (op2 * controls[3]) >> (op3 << op3)) * adsr >> dcfilter >> out;
 			//op2 >> debug;
 			if (adsr.finished())
 				stop();

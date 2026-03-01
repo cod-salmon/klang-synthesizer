@@ -1,10 +1,3 @@
----
-title: The FMFlex1 Synthesizer @ b5bc399
-parent: The FMFlex1 Synthesizer
-layout: home
-nav_order: 1
----
-
 # The FMFlex1 Synthesizer Overview
 ![](./pics/FMFlex1_1.PNG)
 
